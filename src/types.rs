@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use dbus::arg::{Append, Arg, ArgType, Dict, IterAppend, PropMap, RefArg, Variant};
 use dbus::Signature;
@@ -7,38 +8,102 @@ use dbus::Signature;
 pub type AnyVariant = Variant<Box<dyn RefArg + 'static>>;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Config {
+pub struct Config<A> {
 	pub match_regex: String,
 	pub min_letter_count: i32,
 	pub trigger_words: Vec<String>,
-	pub actions: Vec<Action>,
+	pub actions: Vec<A>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Match {
+pub struct Match<A> {
 	pub id: String,
 	pub text: String,
 	pub icon: String,
 	pub ty: MatchType,
 	pub relevance: f64,
-	pub properties: Properties,
-}
-
-// These properties aren't really documented anywhere;
-// please read DBusRunner::convertMatches for information on them
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Properties {
 	pub urls: Vec<String>,
-	pub category: String,
-	pub subtext: String,
+	pub category: Option<String>,
+	pub subtext: Option<String>,
 	pub multiline: bool,
-	pub actions: Vec<Action>,
+	pub actions: Vec<A>,
 	pub icon_data: Option<RemoteImage>,
 }
 
+impl<A: FromStr + ToString> Match<A> {
+	pub fn new(id: String) -> Self {
+		Self {
+			id,
+			text: String::new(),
+			icon: String::new(),
+			ty: MatchType::NoMatch,
+			relevance: 0.0,
+			urls: vec![],
+			category: None,
+			subtext: None,
+			multiline: false,
+			actions: vec![],
+			icon_data: None,
+		}
+	}
+
+	pub fn text(self, text: String) -> Self {
+		Self { text, ..self }
+	}
+
+	pub fn icon(self, icon: String) -> Self {
+		Self { icon, ..self }
+	}
+
+	pub fn ty(self, ty: MatchType) -> Self {
+		Self { ty, ..self }
+	}
+
+	pub fn relevance(self, relevance: f64) -> Self {
+		Self { relevance, ..self }
+	}
+
+	pub fn url(mut self, url: String) -> Self {
+		self.urls.push(url);
+		self
+	}
+
+	pub fn category(self, category: String) -> Self {
+		Self {
+			category: Some(category),
+			..self
+		}
+	}
+
+	pub fn subtext(self, subtext: String) -> Self {
+		Self {
+			subtext: Some(subtext),
+			..self
+		}
+	}
+
+	pub fn multiline(self) -> Self {
+		Self {
+			multiline: true,
+			..self
+		}
+	}
+
+	pub fn action(mut self, action: A) -> Self {
+		self.actions.push(action);
+		self
+	}
+
+	pub fn icon_data(self, icon_data: RemoteImage) -> Self {
+		Self {
+			icon_data: Some(icon_data),
+			..self
+		}
+	}
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Action {
-	pub id: String,
+pub struct ActionInfo {
 	pub text: String,
 	pub icon_source: String,
 }
@@ -95,122 +160,68 @@ fn assert_sig<T: Arg>(expected: &'static str) -> Signature<'static> {
 	sig
 }
 
-impl Arg for Config {
+impl<A: FromStr + ToString> Arg for Config<A> {
 	const ARG_TYPE: ArgType = ArgType::Array;
 
 	fn signature() -> Signature<'static> {
 		assert_sig::<PropMap>("a{sv}")
 	}
 }
-impl Append for Config {
+impl<A: FromStr + ToString> Append for Config<A> {
 	fn append_by_ref(&self, i: &mut IterAppend) {
 		let mut fields = HashMap::<&'static str, AnyVariant>::new();
 		fields.insert("MatchRegex", Variant(self.match_regex.box_clone()));
 		fields.insert("MinLetterCount", Variant(self.min_letter_count.box_clone()));
 		fields.insert("TriggerWords", Variant(self.trigger_words.box_clone()));
-		fields.insert("Actions", Variant(self.actions.box_clone()));
+
+		let actions: Vec<_> = self.actions.iter().map(A::to_string).collect();
+		fields.insert("Actions", Variant(actions.box_clone()));
 
 		Dict::new(fields.iter()).append_by_ref(i)
 	}
 }
 
-impl Arg for Match {
+impl<A: FromStr + ToString> Arg for Match<A> {
 	const ARG_TYPE: ArgType = ArgType::Struct;
 
 	fn signature() -> Signature<'static> {
 		assert_sig::<(String, String, String, MatchType, f64, PropMap)>("(sssida{sv})")
 	}
 }
-impl Append for Match {
+impl<A: FromStr + ToString> Append for Match<A> {
 	fn append_by_ref(&self, i: &mut IterAppend) {
+		let mut fields = HashMap::<&'static str, AnyVariant>::new();
+
+		if !self.urls.is_empty() {
+			fields.insert("urls", Variant(self.urls.box_clone()));
+		}
+		if let Some(category) = &self.category {
+			fields.insert("category", Variant(category.box_clone()));
+		}
+		if let Some(subtext) = &self.subtext {
+			fields.insert("subtext", Variant(subtext.box_clone()));
+		}
+		if self.multiline {
+			fields.insert("multiline", Variant(self.multiline.box_clone()));
+		}
+		if !self.actions.is_empty() {
+			let actions: Vec<_> = self.actions.iter().map(A::to_string).collect();
+			fields.insert("actions", Variant(actions.box_clone()));
+		}
+		if let Some(icon_data) = &self.icon_data {
+			fields.insert("icon-data", Variant(icon_data.box_clone()));
+		}
+
+		let fields = Dict::new(fields.iter());
+
 		i.append((
 			&self.id,
 			&self.text,
 			&self.icon,
 			&self.ty,
 			&self.relevance,
-			&self.properties,
+			&fields,
 		));
-	}
-}
-
-impl Default for Properties {
-	fn default() -> Self {
-		Self {
-			urls: vec![],
-			category: String::new(),
-			subtext: String::new(),
-			multiline: false,
-			actions: vec![],
-			icon_data: None,
-		}
-	}
-}
-impl Arg for Properties {
-	const ARG_TYPE: ArgType = ArgType::Array;
-
-	fn signature() -> Signature<'static> {
-		assert_sig::<PropMap>("a{sv}")
-	}
-}
-impl Append for Properties {
-	fn append_by_ref(&self, i: &mut IterAppend) {
-		let mut fields = HashMap::<&'static str, AnyVariant>::new();
-		fields.insert("urls", Variant(self.urls.box_clone()));
-		fields.insert("category", Variant(self.category.box_clone()));
-		fields.insert("subtext", Variant(self.subtext.box_clone()));
-		fields.insert("multiline", Variant(self.multiline.box_clone()));
-		fields.insert("actions", Variant(self.actions.box_clone()));
-
-		if let Some(icon_data) = &self.icon_data {
-			fields.insert("icon-data", Variant(icon_data.box_clone()));
-		}
-
-		Dict::new(fields.iter()).append_by_ref(i)
-	}
-}
-
-impl Arg for Action {
-	const ARG_TYPE: ArgType = ArgType::Struct;
-
-	fn signature() -> Signature<'static> {
-		assert_sig::<(String, String, String)>("(sss)")
-	}
-}
-impl RefArg for Action {
-	fn arg_type(&self) -> ArgType {
-		Self::ARG_TYPE
-	}
-
-	fn signature(&self) -> Signature<'static> {
-		<Self as Arg>::signature()
-	}
-
-	fn append(&self, i: &mut IterAppend) {
-		self.append_by_ref(i)
-	}
-
-	fn as_any(&self) -> &dyn Any
-	where
-		Self: 'static,
-	{
-		self
-	}
-
-	fn as_any_mut(&mut self) -> &mut dyn Any
-	where
-		Self: 'static,
-	{
-		self
-	}
-
-	fn box_clone(&self) -> Box<dyn RefArg + 'static> {
-		Box::new(self.clone())
-	}
-}
-impl Append for Action {
-	fn append_by_ref(&self, i: &mut IterAppend) {
-		i.append((&self.id, &self.text, &self.icon_source));
 	}
 }
 
