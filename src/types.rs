@@ -1,9 +1,10 @@
 use std::any::Any;
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use dbus::arg::{Append, Arg, ArgType, Dict, IterAppend, PropMap, RefArg, Variant};
 use dbus::Signature;
+
+use crate::Action;
 
 pub type AnyVariant = Variant<Box<dyn RefArg + 'static>>;
 
@@ -30,7 +31,7 @@ pub struct Match<A> {
 	pub icon_data: Option<RemoteImage>,
 }
 
-impl<A: FromStr + ToString> Match<A> {
+impl<A: Action> Match<A> {
 	pub fn new(id: String) -> Self {
 		Self {
 			id,
@@ -160,35 +161,35 @@ fn assert_sig<T: Arg>(expected: &'static str) -> Signature<'static> {
 	sig
 }
 
-impl<A: FromStr + ToString> Arg for Config<A> {
+impl<A: Action> Arg for Config<A> {
 	const ARG_TYPE: ArgType = ArgType::Array;
 
 	fn signature() -> Signature<'static> {
 		assert_sig::<PropMap>("a{sv}")
 	}
 }
-impl<A: FromStr + ToString> Append for Config<A> {
+impl<A: Action> Append for Config<A> {
 	fn append_by_ref(&self, i: &mut IterAppend) {
 		let mut fields = HashMap::<&'static str, AnyVariant>::new();
 		fields.insert("MatchRegex", Variant(self.match_regex.box_clone()));
 		fields.insert("MinLetterCount", Variant(self.min_letter_count.box_clone()));
 		fields.insert("TriggerWords", Variant(self.trigger_words.box_clone()));
 
-		let actions: Vec<_> = self.actions.iter().map(A::to_string).collect();
+		let actions: Vec<_> = self.actions.iter().map(A::to_id).collect();
 		fields.insert("Actions", Variant(actions.box_clone()));
 
 		Dict::new(fields.iter()).append_by_ref(i)
 	}
 }
 
-impl<A: FromStr + ToString> Arg for Match<A> {
+impl<A: Action> Arg for Match<A> {
 	const ARG_TYPE: ArgType = ArgType::Struct;
 
 	fn signature() -> Signature<'static> {
 		assert_sig::<(String, String, String, MatchType, f64, PropMap)>("(sssida{sv})")
 	}
 }
-impl<A: FromStr + ToString> Append for Match<A> {
+impl<A: Action> Append for Match<A> {
 	fn append_by_ref(&self, i: &mut IterAppend) {
 		let mut fields = HashMap::<&'static str, AnyVariant>::new();
 
@@ -205,7 +206,7 @@ impl<A: FromStr + ToString> Append for Match<A> {
 			fields.insert("multiline", Variant(self.multiline.box_clone()));
 		}
 		if !self.actions.is_empty() {
-			let actions: Vec<_> = self.actions.iter().map(A::to_string).collect();
+			let actions: Vec<_> = self.actions.iter().map(A::to_id).collect();
 			fields.insert("actions", Variant(actions.box_clone()));
 		}
 		if let Some(icon_data) = &self.icon_data {
