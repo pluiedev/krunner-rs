@@ -15,6 +15,9 @@
           pkg-config
           dbus
         ];
+        buildInputs = [
+          libsForQt5.kdialog
+        ];
         LD_LIBRARY_PATH = lib.makeLibraryPath [dbus];
       };
   };

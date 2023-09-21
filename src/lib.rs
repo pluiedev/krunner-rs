@@ -1,11 +1,11 @@
 pub use crate::types::*;
 
-// #[path = "async.rs"]
-// mod _async;
+#[path = "async.rs"]
+mod _async;
 mod sync;
 pub mod types;
 
-// pub use _async::{run_async, AsyncRunner};
+pub use _async::{run_async, AsyncRunner};
 pub use sync::{run, Runner};
 
 pub trait Action: Sized {

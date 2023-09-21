@@ -18,7 +18,7 @@ pub trait Runner {
 		&mut self,
 		ctx: &mut Context,
 		match_id: String,
-		action: Self::Action,
+		action: Option<Self::Action>,
 	) -> Result<(), MethodErr>;
 
 	fn config(&mut self, _ctx: &mut Context) -> Result<Config<Self::Action>, Self::Err> {
@@ -45,7 +45,7 @@ pub fn run<R: Runner + Send + 'static>(
 	cr.serve(&c)
 }
 
-fn register<R: Runner + Send + 'static>(cr: &mut Crossroads) -> IfaceToken<R> {
+pub fn register<R: Runner + Send + 'static>(cr: &mut Crossroads) -> IfaceToken<R> {
 	cr.register("org.kde.krunner1", |b| {
 		b.method("Actions", (), ("matches",), |_, _: &mut R, _: ()| {
 			let actions: Vec<_> = R::Action::all()
@@ -63,7 +63,11 @@ fn register<R: Runner + Send + 'static>(cr: &mut Crossroads) -> IfaceToken<R> {
 			("matchId", "actionId"),
 			(),
 			|ctx, runner: &mut R, (match_id, action_id): (String, String)| {
-				let Some(action) = R::Action::from_id(&action_id) else {
+				let action = if let Some(action) = R::Action::from_id(&action_id) {
+					Some(action)
+				} else if action_id.is_empty() {
+					None
+				} else {
 					return Err(MethodErr::invalid_arg("Unknown action"));
 				};
 				runner.run(ctx, match_id, action)?;
