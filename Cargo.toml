@@ -7,15 +7,14 @@ description = "Write KRunner plugins in Rust via D-Bus."
 repository = "https://github.com/pluiedev/krunner"
 license = "MIT OR Apache-2.0"
 
+[features]
+tokio = ["dep:async-trait", "dep:dbus-tokio", "dep:tokio"]
+
 [dependencies]
-anyhow = "1.0.75"
-async-trait = "0.1.73"
 dbus = "0.9.7"
 dbus-crossroads = "0.5.2"
-dbus-tokio = "0.7.6"
-dbus-tree = "0.9.2"
-dialog = "0.3.0"
-probly-search = "2.0.0-alpha-2"
-serde = { version = "1.0.188", features = ["derive"] }
-serde_json = "1.0.107"
-tokio = { version = "1.32.0", features = ["rt-multi-thread", "macros", "io-util", "process", "sync"] }
+
+# tokio
+async-trait = { version = "0.1.73", optional = true }
+dbus-tokio = { version = "0.7.6", optional = true }
+tokio = { version = "1.32.0", features = ["sync"], optional = true }
