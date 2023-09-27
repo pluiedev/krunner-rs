@@ -1,0 +1,16 @@
+[package]
+name = "krunner-derive"
+version = "0.1.0"
+edition = "2021"
+authors = ["Leah Amelia Chen <hi@pluie.me>"]
+description = "Derive macros for krunner-rs"
+repository = "https://github.com/pluiedev/krunner"
+license = "MIT OR Apache-2.0"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = "2.0.37"
+quote = "1.0.33"
+darling = "0.20.3"

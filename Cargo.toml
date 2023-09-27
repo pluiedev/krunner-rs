@@ -1,14 +1,18 @@
 [package]
 name = "krunner"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Leah Amelia Chen <hi@pluie.me>"]
 description = "Write KRunner plugins in Rust via D-Bus."
 repository = "https://github.com/pluiedev/krunner"
 license = "MIT OR Apache-2.0"
 
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docs_rs"]
+
 [features]
 tokio = ["dep:async-trait", "dep:dbus-tokio", "dep:tokio"]
+derive = ["dep:krunner-derive"]
 
 [dependencies]
 dbus = "0.9.7"
@@ -17,4 +21,10 @@ dbus-crossroads = "0.5.2"
 # tokio
 async-trait = { version = "0.1.73", optional = true }
 dbus-tokio = { version = "0.7.6", optional = true }
-tokio = { version = "1.32.0", features = ["sync"], optional = true }
+tokio = { version = "1.32.0", features = ["rt", "sync"], optional = true }
+
+# derive
+krunner-derive = { path = "./derive", optional = true }
+
+[workspace]
+members = ["derive"]
