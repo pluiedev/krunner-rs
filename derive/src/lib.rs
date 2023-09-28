@@ -59,8 +59,8 @@ pub fn derive_action(input: TokenStream) -> TokenStream {
 	quote! {
 		#[automatically_derived]
 		impl #impl_generics ::krunner::Action for #ident #ty_generics #where_clause {
-			fn all() -> ::std::vec::Vec<Self> {
-				vec![#(Self::#variant_ids),*]
+			fn all() -> &'static [Self] {
+				&[#(Self::#variant_ids),*]
 			}
 			fn from_id(s: &str) -> ::std::option::Option<Self> {
 				match s {

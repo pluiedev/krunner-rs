@@ -10,30 +10,147 @@ mod sync;
 
 use std::any::Any;
 use std::collections::HashMap;
+use std::marker::PhantomData;
 
 #[cfg(feature = "tokio")]
 pub use _async::*;
 use dbus::arg::{Append, Arg, ArgType, Dict, IterAppend, PropMap, RefArg, Variant};
 use dbus::Signature;
 #[cfg(feature = "derive")]
+#[cfg_attr(docs_rs, doc(cfg(feature = "derive")))]
+/// Derive macro allowing users to easily generate [`Action`s](Action) for their
+/// runners.
+///
+/// Currently, only enums with unit variants are supported. Each variant has to
+/// be tagged with a `#[action]` attribute, which accepts three fields: `id`,
+/// for the unique identifier of the action, `title` for the human-friendly name
+/// of the action, and `icon` for the name of the action's icon.
+///
+/// # Example
+/// ```
+/// #[derive(krunner::Action)]
+/// pub enum Action {
+/// 	#[action(
+/// 		id = "open-in-browser",
+/// 		title = "Open in Browser",
+/// 		icon = "internet-web-browser"
+/// 	)]
+/// 	OpenInBrowser,
+/// 	#[action(
+/// 		id = "save-to-folder",
+/// 		title = "Save to Folder",
+/// 		icon = "document-save-symbolic"
+/// 	)]
+/// 	SaveToFolder,
+/// }
+/// ```
 pub use krunner_derive::Action;
 pub use sync::*;
 
 /// Trait for actions that the user can perform.
+///
+/// # Example
+/// Using the [derive macro](derive@Action):
+/// ```
+/// #[derive(krunner::Action)]
+/// pub enum Action {
+/// 	#[action(
+/// 		id = "open-in-browser",
+/// 		title = "Open in Browser",
+/// 		icon = "internet-web-browser"
+/// 	)]
+/// 	OpenInBrowser,
+/// 	#[action(
+/// 		id = "save-to-folder",
+/// 		title = "Save to Folder",
+/// 		icon = "document-save-symbolic"
+/// 	)]
+/// 	SaveToFolder,
+/// }
+/// ```
+///
+/// The equivalent without using the derive macro:
+/// ```
+/// use krunner::ActionInfo;
+///
+/// pub enum Action {
+/// 	OpenInBrowser,
+/// 	SaveToFolder,
+/// }
+/// impl krunner::Action for Action {
+/// 	fn all() -> &'static [Self] {
+/// 		&[Self::OpenInBrowser, Self::SaveToFolder]
+/// 	}
+///
+/// 	fn from_id(s: &str) -> Option<Self> {
+/// 		Some(match s {
+/// 			"open-in-browser" => Self::OpenInBrowser,
+/// 			"save-to-folder" => Self::SaveToFolder,
+/// 			_ => return None,
+/// 		})
+/// 	}
+///
+/// 	fn to_id(&self) -> String {
+/// 		match self {
+/// 			Self::OpenInBrowser => "open-in-browser",
+/// 			Self::SaveToFolder => "save-to-folder",
+/// 		}
+/// 		.to_owned()
+/// 	}
+///
+/// 	fn info(&self) -> ActionInfo {
+/// 		match self {
+/// 			Self::OpenInBrowser => ActionInfo {
+/// 				title: "Open in Browser".to_owned(),
+/// 				icon: "internet-web-browser".to_owned(),
+/// 			},
+/// 			Self::SaveToFolder => ActionInfo {
+/// 				title: "Save to Folder".to_owned(),
+/// 				icon: "document-save-symbolic".to_owned(),
+/// 			},
+/// 		}
+/// 	}
+/// }
+/// ```
 pub trait Action: Sized {
-	fn all() -> Vec<Self>;
+	/// Every action possible of this type.
+	fn all() -> &'static [Self];
 
+	/// Tries to get an action by its unique ID.
 	fn from_id(s: &str) -> Option<Self>;
+	/// Returns the unique ID of the action.
 	fn to_id(&self) -> String;
+	/// Returns associated information about the action.
 	fn info(&self) -> ActionInfo;
 }
 
+/// Configuration for a runner.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Config<A> {
-	pub match_regex: String,
-	pub min_letter_count: i32,
-	pub trigger_words: Vec<String>,
-	pub actions: Vec<A>,
+	/// The filter that a query must pass before attempting a match.
+	pub match_filter: Option<MatchFilter>,
+
+	/// The minimum length a query must be before attempting a match.
+	/// Queries shorter than this minimum letter count will not be matched
+	/// against.
+	pub min_letter_count: Option<u32>,
+
+	_phan: PhantomData<A>,
+}
+
+/// A filter that a query must pass through before attempting a match.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum MatchFilter {
+	/// A list of keywords that, if found at the start of a query, would trigger
+	/// a match. Also known in KDE docs as "trigger words".
+	///
+	/// Useful for runners that are only triggered by an initial keyword.
+	Keywords(Vec<String>),
+	/// A regex that a query must match before attempting a match.
+	///
+	/// Useful for runners that are only interested in queries of a certain
+	/// pattern.
+	Regex(String),
 }
 
 /// A query match.
@@ -76,33 +193,45 @@ pub struct Match<A> {
 pub enum MatchIcon {
 	/// An icon specified by its icon name (e.g. `new-command-alarm`).
 	ByName(String),
-	/// An icon specified by associated [custom image data](RemoteImage).
-	Custom(RemoteImage),
+	/// An icon specified by associated [custom image data](ImageData).
+	Custom(ImageData),
 }
 
+/// Information related to an action.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ActionInfo {
+	/// The title of the action.
 	#[doc(alias = "text")]
 	pub title: String,
+	/// The name of the icon of the action.
 	pub icon: String,
 }
 
+/// The image data that KRunner accepts for icons.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct RemoteImage {
+pub struct ImageData {
 	/// The width of the image.
 	pub width: i32,
 	/// The height of the image.
 	pub height: i32,
-	///
+	/// The row stride (aka the size of one row in bytes) of the image.
 	pub row_stride: i32,
 	/// Whether the image contains an alpha channel (i.e. transparency
 	/// information)
 	pub has_alpha: bool,
-	/// The bits per sample (bit depth) of the image.
-	pub bits_per_sample: i32,
-	/// The number of channels of the image.
-	pub channels: i32,
+	/// The format of the image.
+	pub format: ImageFormat,
+	/// The image data.
 	pub data: Vec<u8>,
+}
+
+/// The image formats supported by KRunner for icons.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum ImageFormat {
+	/// 32-bit ARGB.
+	Argb32,
+	/// 32-bit RGB.
+	Rgb32,
 }
 
 /// The type of the match.
@@ -142,10 +271,21 @@ pub enum MatchType {
 	ExactMatch = 100,
 }
 
-//= IMPL =//
+//================ IMPL ================//
+
 pub(crate) fn action_as_arg<A: Action>(action: &A) -> (String, String, String) {
 	let ActionInfo { title, icon } = action.info();
 	(action.to_id(), title, icon)
+}
+
+impl<A> Default for Config<A> {
+	fn default() -> Self {
+		Self {
+			match_filter: None,
+			min_letter_count: None,
+			_phan: PhantomData,
+		}
+	}
 }
 
 impl MatchIcon {
@@ -163,8 +303,8 @@ impl From<String> for MatchIcon {
 		Self::ByName(s)
 	}
 }
-impl From<RemoteImage> for MatchIcon {
-	fn from(i: RemoteImage) -> Self {
+impl From<ImageData> for MatchIcon {
+	fn from(i: ImageData) -> Self {
 		Self::Custom(i)
 	}
 }
@@ -184,14 +324,24 @@ impl<A: Action> Arg for Config<A> {
 		assert_sig::<PropMap>("a{sv}")
 	}
 }
-impl<A: Action> Append for Config<A> {
+impl<A: Action + 'static> Append for Config<A> {
 	fn append_by_ref(&self, i: &mut IterAppend<'_>) {
 		let mut fields = HashMap::<&'static str, AnyVariant>::new();
-		fields.insert("MatchRegex", Variant(self.match_regex.box_clone()));
-		fields.insert("MinLetterCount", Variant(self.min_letter_count.box_clone()));
-		fields.insert("TriggerWords", Variant(self.trigger_words.box_clone()));
 
-		let actions: Vec<_> = self.actions.iter().map(action_as_arg).collect();
+		match &self.match_filter {
+			Some(MatchFilter::Keywords(kws)) => {
+				fields.insert("TriggerWords", Variant(kws.box_clone()));
+			}
+			Some(MatchFilter::Regex(r)) => {
+				fields.insert("MatchRegex", Variant(r.box_clone()));
+			}
+			_ => {}
+		}
+		if let Some(min_letter_count) = self.min_letter_count {
+			fields.insert("MinLetterCount", Variant(min_letter_count.box_clone()));
+		}
+
+		let actions: Vec<_> = A::all().iter().map(action_as_arg).collect();
 		fields.insert("Actions", Variant(actions.box_clone()));
 
 		Dict::new(fields.iter()).append_by_ref(i)
@@ -276,14 +426,14 @@ impl Append for MatchType {
 	}
 }
 
-impl Arg for RemoteImage {
+impl Arg for ImageData {
 	const ARG_TYPE: ArgType = ArgType::Struct;
 
 	fn signature() -> Signature<'static> {
 		assert_sig::<(i32, i32, i32, bool, i32, i32, Vec<u8>)>("(iiibiiay)")
 	}
 }
-impl RefArg for RemoteImage {
+impl RefArg for ImageData {
 	fn arg_type(&self) -> ArgType {
 		Self::ARG_TYPE
 	}
@@ -314,17 +464,31 @@ impl RefArg for RemoteImage {
 		Box::new(self.clone())
 	}
 }
-
-impl Append for RemoteImage {
+impl Append for ImageData {
 	fn append_by_ref(&self, i: &mut IterAppend<'_>) {
 		i.append((
 			&self.width,
 			&self.height,
 			&self.row_stride,
 			&self.has_alpha,
-			&self.bits_per_sample,
-			&self.channels,
+			&self.format.bits_per_sample(),
+			&self.format.channels(),
 			&self.data,
 		))
+	}
+}
+
+impl ImageFormat {
+	fn bits_per_sample(&self) -> i32 {
+		match self {
+			Self::Argb32 | Self::Rgb32 => 8,
+		}
+	}
+
+	fn channels(&self) -> i32 {
+		match self {
+			Self::Argb32 => 4,
+			Self::Rgb32 => 3,
+		}
 	}
 }

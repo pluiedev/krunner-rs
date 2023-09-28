@@ -8,9 +8,6 @@ enum Action {
 	Run,
 }
 
-#[derive(Debug)]
-enum Error {}
-
 struct Runner;
 
 impl krunner::Runner for Runner {

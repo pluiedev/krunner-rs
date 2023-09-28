@@ -4,7 +4,7 @@ use std::sync::Arc;
 use dbus::channel::MatchingReceiver;
 use dbus::message::MatchRule;
 use dbus::MethodErr;
-use dbus_crossroads::{Crossroads, IfaceToken};
+use dbus_crossroads::{Context, Crossroads, IfaceToken};
 use tokio::sync::Mutex;
 
 use crate::{Action, Config, Match};
@@ -20,10 +20,76 @@ pub trait AsyncRunner {
 	#[doc = include_str!("./docs/runner/err.md")]
 	type Err: Display;
 
-	#[doc = include_str!("./docs/runner/matches.md")]
+	#[doc = concat!(include_str!("./docs/runner/matches.md"), "\n\n")]
+	/// # Example
+	///
+	/// ```ignore
+	/// struct Runner {
+	///     known_words: Vec<String>,
+	/// }
+	///
+	/// #[async_trait::async_trait]
+	/// impl krunner::AsyncRunner for Runner {
+	///     // ...
+	///
+	///     async fn matches(
+	///         &mut self,
+	///         query: String
+	///     ) -> Result<Vec<Match<Self::Action>>, Self::Err> {
+	///         let matches = if self.known_words.contains(&query) {
+	///             vec![Match {
+	///                 id: query.clone(),
+	///                 title: format!("Matched word: {query}"),
+	///                 ty: MatchType::ExactMatch,
+	///                 relevance: 1.0,
+	///
+	///                 ..Match::default()
+	///             }]
+	///         } else {
+	///             vec![]
+	///         };
+	///         Ok(matches)
+	///     }
+	///
+	///     // ...
+	/// }
+	/// ```
 	async fn matches(&mut self, query: String) -> Result<Vec<Match<Self::Action>>, Self::Err>;
 
-	#[doc = include_str!("./docs/runner/run.md")]
+	#[doc = concat!(include_str!("./docs/runner/run.md"), "\n\n")]
+	/// # Example
+	///
+	/// ```ignore
+	/// struct Runner {
+	///     known_words: Vec<String>,
+	/// }
+	///
+	/// #[async_trait::async_trait]
+	/// impl krunner::AsyncRunner for Runner {
+	///     // ...
+	///
+	///     async fn run(
+	///         &mut self,
+	///         match_id: String,
+	///         action: Option<Self::Action>,
+	///     ) -> Result<(), Self::Err> {
+	///         match action {
+	///             Some(Action::LaunchDictionary) => {
+	///                 // Launch dictionary via xdg-open
+	///                 tokio::process::Command::new("xdg-open")
+	///                     .arg(&format!("https://en.wiktionary.org/wiki/{match_id}"))
+	///                     .spawn()
+	///                     .unwrap();
+	///             }
+	///             None => {
+	///                 // If the user didn't choose any specific action, do nothing
+	///             }
+	///         }
+	///     }
+	///
+	///     // ...
+	/// }
+	/// ```
 	async fn run(
 		&mut self,
 		match_id: String,
@@ -41,18 +107,37 @@ pub trait AsyncRunner {
 	}
 }
 
+/// Helper methods for [`AsyncRunner`]s.
 #[cfg_attr(not(docs_rs), async_trait::async_trait)]
 pub trait AsyncRunnerExt: AsyncRunner + Sized + Send + 'static {
-	/// Runs a [runner](Runner) on the main thread forever.
+	/// Starts running this runner asynchronously.
 	///
 	/// This is a convenience function that starts a new D-Bus connection,
 	/// requests the given service name, [registers the KRunner
-	/// interface](Self::register), and starts indefinitely listening on the
-	/// session bus.
+	/// interface](Self::register), and starts an asynchronous task that
+	/// is indefinitely listening on the session bus.
+	///
+	/// # Example
+	/// ```ignore
+	/// use krunner::{AsyncRunner, AsyncRunnerExt};
+	///
+	/// struct Runner;
+	///
+	/// impl AsyncRunner for Runner {
+	/// 	// ...
+	/// }
+	///
+	/// #[tokio::main]
+	/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+	/// 	Runner.start("some.runner.path", "/SomeRunner").await?;
+	/// 	Ok(())
+	/// }
+	/// ```
 	async fn start(self, service: &'static str, path: &'static str) -> Result<(), dbus::Error>
 	where
 		Self::Action: Send;
 
+	#[doc = include_str!("./docs/runnerext/register.md")]
 	fn register(cr: &mut Crossroads) -> IfaceToken<Arc<Mutex<Self>>>
 	where
 		Self::Action: Send;
@@ -116,7 +201,7 @@ impl<R: AsyncRunner + Sized + Send + 'static> AsyncRunnerExt for R {
 				("matchId", "actionId"),
 				(),
 				|mut ctx, cr, (match_id, action_id): (String, String)| {
-					let runner: Arc<Mutex<Self>> = Arc::clone(cr.data_mut(ctx.path()).unwrap());
+					let runner = get_runner::<Self>(cr, &ctx);
 
 					async move {
 						ctx.reply('r: {
@@ -141,7 +226,7 @@ impl<R: AsyncRunner + Sized + Send + 'static> AsyncRunnerExt for R {
 				("query",),
 				("matches",),
 				|mut ctx, cr, (query,): (String,)| {
-					let runner: Arc<Mutex<Self>> = Arc::clone(cr.data_mut(ctx.path()).unwrap());
+					let runner = get_runner::<Self>(cr, &ctx);
 
 					async move {
 						ctx.reply({
@@ -156,7 +241,7 @@ impl<R: AsyncRunner + Sized + Send + 'static> AsyncRunnerExt for R {
 				},
 			);
 			b.method_with_cr_async("Config", (), ("config",), |mut ctx, cr, _: ()| {
-				let runner: Arc<Mutex<Self>> = Arc::clone(cr.data_mut(ctx.path()).unwrap());
+				let runner = get_runner::<Self>(cr, &ctx);
 
 				async move {
 					ctx.reply({
@@ -171,8 +256,7 @@ impl<R: AsyncRunner + Sized + Send + 'static> AsyncRunnerExt for R {
 				}
 			});
 			b.method_with_cr_async("Teardown", (), (), |mut ctx, cr, _: ()| {
-				let runner: Arc<Mutex<Self>> = Arc::clone(cr.data_mut(ctx.path()).unwrap());
-
+				let runner = get_runner::<Self>(cr, &ctx);
 				async move {
 					ctx.reply({
 						let mut lock = runner.lock().await;
@@ -183,4 +267,8 @@ impl<R: AsyncRunner + Sized + Send + 'static> AsyncRunnerExt for R {
 			});
 		})
 	}
+}
+
+fn get_runner<R: AsyncRunnerExt>(cr: &mut Crossroads, ctx: &Context) -> Arc<Mutex<R>> {
+	Arc::clone(cr.data_mut(ctx.path()).unwrap())
 }
