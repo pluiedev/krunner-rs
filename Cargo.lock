@@ -185,13 +185,24 @@ dependencies = [
  "dbus",
  "dbus-crossroads",
  "dbus-tokio",
- "krunner-derive",
+ "krunner-derive 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio",
 ]
 
 [[package]]
 name = "krunner-derive"
 version = "0.1.0"
+dependencies = [
+ "darling",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "krunner-derive"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3c37e1e251182aab6aaefca0493a3bd4b4b1692d602ab5cc3cb5c1b65c10920"
 dependencies = [
  "darling",
  "quote",

@@ -3,9 +3,10 @@ name = "krunner"
 version = "0.1.1"
 edition = "2021"
 authors = ["Leah Amelia Chen <hi@pluie.me>"]
-description = "Write KRunner plugins in Rust via D-Bus."
+description = "A crate for writing KRunner plugins in Rust, easily."
 repository = "https://github.com/pluiedev/krunner"
 license = "MIT OR Apache-2.0"
+keywords = ["krunner", "dbus"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docs_rs"]
@@ -24,7 +25,7 @@ dbus-tokio = { version = "0.7.6", optional = true }
 tokio = { version = "1.32.0", features = ["rt", "sync"], optional = true }
 
 # derive
-krunner-derive = { path = "./derive", optional = true }
+krunner-derive = { version = "0.1.0", optional = true }
 
 [workspace]
 members = ["derive"]
