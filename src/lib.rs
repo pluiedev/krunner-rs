@@ -1,6 +1,15 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(docs_rs, feature(doc_cfg, async_fn_in_trait))]
 #![deny(rust_2018_idioms)]
+#![warn(clippy::pedantic)]
+// annoying false positives
+#![allow(
+	clippy::missing_errors_doc,
+	clippy::doc_markdown,
+	clippy::tabs_in_doc_comments,
+	clippy::module_name_repetitions,
+	clippy::ignored_unit_patterns
+)]
 
 #[path = "async.rs"]
 #[cfg(feature = "tokio")]
@@ -253,7 +262,9 @@ pub enum MatchType {
 	///
 	/// The data of the match will be converted to a string and set in
 	/// the search field.
-	#[deprecated(since = "KDE Frameworks version 5.99.")]
+	///
+	/// **Deprecated** since KDE Frameworks version 5.99.
+	#[deprecated(since = "0.1.0")]
 	InformationalMatch = 50,
 
 	/// A match that represents an action not directly related to activating
@@ -295,7 +306,7 @@ impl MatchIcon {
 }
 impl Default for MatchIcon {
 	fn default() -> Self {
-		Self::ByName("".to_owned())
+		Self::ByName(String::new())
 	}
 }
 impl From<String> for MatchIcon {
@@ -344,15 +355,15 @@ impl<A: Action + 'static> Append for Config<A> {
 		let actions: Vec<_> = A::all().iter().map(action_as_arg).collect();
 		fields.insert("Actions", Variant(actions.box_clone()));
 
-		Dict::new(fields.iter()).append_by_ref(i)
+		Dict::new(fields.iter()).append_by_ref(i);
 	}
 }
 
 impl<A: Action> Default for Match<A> {
 	fn default() -> Self {
 		Self {
-			id: "".to_owned(),
-			title: "".to_owned(),
+			id: String::new(),
+			title: String::new(),
 			subtitle: None,
 			icon: MatchIcon::new(),
 			ty: MatchType::PossibleMatch,
@@ -422,7 +433,7 @@ impl Arg for MatchType {
 }
 impl Append for MatchType {
 	fn append_by_ref(&self, i: &mut IterAppend<'_>) {
-		(*self as i32).append_by_ref(i)
+		(*self as i32).append_by_ref(i);
 	}
 }
 
@@ -443,7 +454,7 @@ impl RefArg for ImageData {
 	}
 
 	fn append(&self, i: &mut IterAppend<'_>) {
-		self.append_by_ref(i)
+		self.append_by_ref(i);
 	}
 
 	fn as_any(&self) -> &dyn Any
@@ -474,7 +485,7 @@ impl Append for ImageData {
 			&self.format.bits_per_sample(),
 			&self.format.channels(),
 			&self.data,
-		))
+		));
 	}
 }
 

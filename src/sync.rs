@@ -102,7 +102,7 @@ pub trait RunnerExt: Runner + Sized + Send + 'static {
 	/// Starts running this runner on the main thread indefinitely.
 	///
 	/// This is a convenience function that starts a new D-Bus connection,
-	/// requests the given service name, [registers the KRunner
+	/// requests the given service name, [registers the `KRunner`
 	/// interface](Self::register), and starts indefinitely listening on the
 	/// session bus.
 	///
@@ -141,7 +141,7 @@ impl<R: Runner + Sized + Send + 'static> RunnerExt for R {
 
 	fn register(cr: &mut Crossroads) -> IfaceToken<Self> {
 		cr.register("org.kde.krunner1", |b| {
-			b.method("Actions", (), ("matches",), |_, _: &mut Self, _: ()| {
+			b.method("Actions", (), ("matches",), |_, _: &mut Self, (): ()| {
 				let actions: Vec<_> = Self::Action::all()
 					.iter()
 					.map(crate::action_as_arg)
@@ -174,13 +174,13 @@ impl<R: Runner + Sized + Send + 'static> RunnerExt for R {
 					Err(e) => Err(MethodErr::failed(&e)),
 				},
 			);
-			b.method("Config", (), ("config",), |_, runner, _: ()| {
+			b.method("Config", (), ("config",), |_, runner, (): ()| {
 				match runner.config() {
 					Ok(c) => Ok((c,)),
 					Err(e) => Err(MethodErr::failed(&e)),
 				}
 			});
-			b.method("Teardown", (), (), |_, runner, _: ()| {
+			b.method("Teardown", (), (), |_, runner, (): ()| {
 				runner.teardown().map_err(|e| MethodErr::failed(&e))
 			});
 		})
