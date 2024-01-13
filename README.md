@@ -2,7 +2,7 @@
 
 A crate for writing [KRunner](https://userbase.kde.org/Plasma/Krunner) plugins in Rust, easily.
 
-Check out the [examples](https://github.com/pluiedev/krunner-rs) for more!
+Check out the [examples](./examples) for more!
 
 # Feature flags
 
